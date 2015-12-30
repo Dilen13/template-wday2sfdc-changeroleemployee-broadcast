@@ -1,34 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:spring="http://www.springframework.org/schema/beans" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" 
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:spring="http://www.springframework.org/schema/beans"  
 	  xmlns:wd-hr="http://www.mulesoft.org/schema/mule/wd-hr"
       xmlns="http://www.mulesoft.org/schema/mule/core"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      version="EE-3.6.2"
+      version="EE-3.7.1"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/wd-hr http://www.mulesoft.org/schema/mule/wd-hr/current/mule-wd-hr.xsd
-http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/current/mule-data-mapper.xsd
-http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd">
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
 
 	<!-- In this file you should declare all your inbound endpoints in order to control the access to your application -->
 
 	<flow name="triggerRoleChangeFlow" processingStrategy="synchronous" >
 		<poll doc:name="fireup Worker synchronization">
 			<fixed-frequency-scheduler frequency="${poll.frequencyMillis}" startDelay="${poll.startDelayMillis}" />
-			<watermark variable="lastQueryDate" default-expression="${watermark.default.expression}" selector="FIRST" selector-expression="#[payload.LastModifiedDate]"/>
+			<watermark variable="lastQueryDate" default-expression="${watermark.default.expression}" update-expression="#[flowVars.updatedThrough]"/>
 			<processor-chain doc:name="query Workers and set collection">
-				<logger message="Fetching Workday to change role...#[groovy: new Date().format('yyyy-MM-dd HH:mm:ss')]" level="INFO" doc:name="Log 'Fetching workday updates...'"/>
-				<wd-hr:get-workers config-ref="WorkdayHumanResource" doc:name="Get Workers from Workday Human Resource" workersRequest-ref="#[org.mule.templates.ChangeRoleEmployeeRequest.create(lastQueryDate)]"></wd-hr:get-workers>
-                <data-mapper:transform config-ref="transform_Workday_workers_for_rolechange" doc:name="Transform Workday workers to map of values for role change in Salesforce">
-                    <data-mapper:input-arguments>
-                        <data-mapper:input-argument key="UpdatedThrough">#[payload.getRequestCriteria().getTransactionLogCriteriaData()[0].getTransactionDateRangeData().getUpdatedThrough()]</data-mapper:input-argument>
-                    </data-mapper:input-arguments>
-                </data-mapper:transform>
+				<logger message="Fetching Workday to change role...#[flowVars.lastQueryDate.getTime()]" level="INFO" doc:name="Log 'Fetching workday updates...'"/>
+                <dw:transform-message doc:name="Create GetWorkers Request">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	requestCriteria: {
+		excludeContingentWorkers: true,
+		excludeInactiveWorkers: true,
+		transactionLogCriteriaData: [{
+			transactionDateRangeData: {
+				updatedFrom: flowVars.lastQueryDate,
+				updatedThrough: now - |PT6S|
+			}
+		}]	
+	},
+	responseGroup: {
+		includePersonalInformation: true,
+		includeEmploymentInformation: true,
+		includeOrganizations: true,
+		includeRoles: true
+	}
+} as :object {
+	class : "com.workday.hr.GetWorkersRequestType"
+}]]></dw:set-payload>
+                </dw:transform-message>
+                <wd-hr:get-workers config-ref="WorkdayHumanResource" doc:name="Get Workers from Workday Human Resource"/>
+
+
 			</processor-chain>
 		</poll>
-        <expression-filter expression="#[payload.size() &gt; 0]" doc:name="Expression"/>
 
+		<set-variable doc:name="Set updatedThrough" value="#[payload.requestCriteria.transactionLogCriteriaData[0].transactionDateRangeData.updatedThrough]" variableName="updatedThrough" />
+
+        <dw:transform-message doc:name="Workday workers to Salesforce users">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+--- 
+payload.responseData.worker.workerData map {
+	"Email" : $.personalData.contactData.emailAddressData[0].emailAddress,
+	"RoleId" : $.roleData.organizationRoleData.organizationRole[0].organizationRoleReference.ID[0].value 
+		when $.roleData != null otherwise null
+} unless (payload.responseData is :null) otherwise []]]></dw:set-payload>
+        </dw:transform-message>
+
+        <expression-filter expression="#[payload.size() &gt; 0]" doc:name="Filter empty result set"/>
+
+		<custom-transformer class="org.mule.templates.FilterDuplicateUsersTransformer" doc:name="Filter duplicate users"/>        
         <flow-ref name="roleChangeFlow" doc:description="roleChangeFlow"  doc:name="Trigger roleChangeFlow"/>
     </flow>
 

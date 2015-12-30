@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:spring="http://www.springframework.org/schema/beans" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" 
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:spring="http://www.springframework.org/schema/beans"  
 	  xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
 	  xmlns:json="http://www.mulesoft.org/schema/mule/json"
 	  xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc"
       xmlns="http://www.mulesoft.org/schema/mule/core"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      version="EE-3.6.2"
+      version="EE-3.7.1"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
 http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
 http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
-http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/current/mule-data-mapper.xsd
-http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd">
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
 
 	<batch:job name="roleChangeBatch">
 		<batch:threading-profile poolExhaustedAction="WAIT" />
@@ -23,12 +24,18 @@ http://www.springframework.org/schema/beans http://www.springframework.org/schem
                 <enricher source="#[payload]" target="#[recordVars['userInSalesforce']]" doc:name="store result in record var 'userInSalesforce'">
                     <sfdc:query-single config-ref="Salesforce" query="SELECT Id FROM User WHERE Email = '#[payload['Email']]'" doc:name="Query User in Salesforce"/>
                 </enricher>
+                <set-variable variableName="rolesMap" value="#[${wday.sfdc.rolesMap}]" doc:name="Set rolesMap from properties"/>
+                <dw:transform-message doc:name="Set RoleId for upsert">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	// Add target system ID as it is an update
+Id: recordVars.userInSalesforce.Id,
+RoleId: flowVars.rolesMap[payload.RoleId]
+}]]></dw:set-payload>
+                </dw:transform-message>
 
-                <expression-component doc:name="Set RoleId for upsert"><![CDATA[// Add target system ID as it is an update
-payload.put('Id', recordVars['userInSalesforce']['Id']);
-rolesMap = ${wday.sfdc.rolesMap};
-payload.put('RoleId', rolesMap.get( payload['RoleId'] ));
-]]></expression-component>
 			</batch:step>
 			<batch:step name="foreachChangeUserRoleInSalesforce" accept-expression="#[recordVars['userInSalesforce'] != null &amp;&amp; payload['RoleId'] != null]">
 
@@ -37,13 +44,17 @@ payload.put('RoleId', rolesMap.get( payload['RoleId'] ));
 	                     <sfdc:query-single config-ref="Salesforce" doc:name="Query if exist PermissionSet for another RoleId as the one provided" query="Select Id, p.PermissionSet.ProfileId, p.PermissionSetId, p.Assignee.Email, p.Assignee.Id From PermissionSetAssignment p where AssigneeId = '#[payload['Id']]' and PermissionSetId != '#[payload['RoleId']]'  and PermissionSet.ProfileId = null"/>
 					</enricher>
                     <choice doc:name="Choice">
-                        <when expression="#[!(flowVars['userPermissionSet'] is NullPayload)]">
-                            <data-mapper:transform config-ref="Result_To_UserId" doc:name="Transform input arguments to values to create PermissionSet of the upserted user">
-                                <data-mapper:input-arguments>
-                                    <data-mapper:input-argument key="AssigneeId">#[payload['Id']]</data-mapper:input-argument>
-                                    <data-mapper:input-argument key="PermissionSetId">#[payload['RoleId']]</data-mapper:input-argument>
-                                </data-mapper:input-arguments>
-                            </data-mapper:transform>
+                        <when expression="#[!(flowVars['userPermissionSet'] == null)]">
+                        <dw:transform-message doc:name="Transform input arguments to values to create PermissionSet of the upserted User">
+                            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+[{
+	"AssigneeId" : payload.Id,
+	"PermissionSetId": payload.RoleId
+}]]]></dw:set-payload>
+                        </dw:transform-message>
+
 	                        <enricher source="#[payload]" target="#[flowVars['permissionSetDeleted']]" doc:name="store result in flow var 'permissionSetDeleted'">
 	                            <sfdc:delete config-ref="Salesforce" doc:name="Salesforce">
 	                                <sfdc:ids>
@@ -58,24 +69,29 @@ payload.put('RoleId', rolesMap.get( payload['RoleId'] ));
                         <otherwise>
 							<enricher source="#[payload]" target="#[flowVars['userPermissionSet']]"
 								doc:name="store result in flow var 'userPermissionSet'" >
-			                     <sfdc:query-single config-ref="Salesforce" doc:name="Query if exist PermissionSet for user" query="Select Id, p.PermissionSet.ProfileId, p.PermissionSetId, p.Assignee.Email, p.Assignee.Id From PermissionSetAssignment p where AssigneeId = '#[payload['Id']]' and PermissionSetId = '#[payload['RoleId']]'  and PermissionSet.ProfileId = null"/>
+                            <sfdc:query-single config-ref="Salesforce" query="Select Id, p.PermissionSet.ProfileId, p.PermissionSetId, p.Assignee.Email, p.Assignee.Id From PermissionSetAssignment p where AssigneeId = '#[payload['Id']]' and PermissionSetId = '#[payload['RoleId']]'  and PermissionSet.ProfileId = null" doc:name="Query if exist PermissionSet for user"/>
+
 							</enricher>
-	                        <choice doc:name="Choice">
-	                        	<when expression="#[(flowVars['userPermissionSet'] is NullPayload)]">
-		                            <data-mapper:transform config-ref="Result_To_UserId" doc:name="Transform input arguments to values to create PermissionSet of the upserted user">
-		                                <data-mapper:input-arguments>
-		                                    <data-mapper:input-argument key="AssigneeId">#[payload['Id']]</data-mapper:input-argument>
-		                                    <data-mapper:input-argument key="PermissionSetId">#[payload['RoleId']]</data-mapper:input-argument>
-		                                </data-mapper:input-arguments>
-		                            </data-mapper:transform>
-				                    <sfdc:upsert config-ref="Salesforce" externalIdFieldName="Id" type="PermissionSetAssignment" doc:name="Upsert User's Permission Set Assignment in Salesforce">
-				                        <sfdc:objects ref="#[payload]"/>
-				                    </sfdc:upsert>
-	                        	</when>
-		                        <otherwise>
-			                        <logger level="INFO" doc:name="Nothing to do" message="aaaaaaaaaaaaaaaaa"/>
-		                        </otherwise>
-	                        </choice>
+                        <choice doc:name="Choice">
+                            <when expression="#[(flowVars['userPermissionSet'] == null)]">
+                                <dw:transform-message doc:name="Transform input arguments to values to create PermissionSet of the upserted User">
+                                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+[{
+	"AssigneeId" : payload.Id,
+	"PermissionSetId": payload.RoleId
+}]]]></dw:set-payload>
+                                </dw:transform-message>
+                                <sfdc:upsert config-ref="Salesforce" externalIdFieldName="Id" type="PermissionSetAssignment" doc:name="Upsert User's Permission Set Assignment in Salesforce">
+                                    <sfdc:objects ref="#[payload]"/>
+                                </sfdc:upsert>
+                            </when>
+                            <otherwise>
+                                <logger message="aaaaaaaaaaaaaaaaa" level="INFO" doc:name="Nothing to do"/>
+                            </otherwise>
+                        </choice>
+
 	                    </otherwise>
                     </choice>
 			</batch:step>

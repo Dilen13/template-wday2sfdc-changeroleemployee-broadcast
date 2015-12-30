@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:wd-hr="http://www.mulesoft.org/schema/mule/wd-hr" 
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:wd-hr="http://www.mulesoft.org/schema/mule/wd-hr" 
 	  xmlns="http://www.mulesoft.org/schema/mule/core" 
 	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	  version="EE-3.6.2"
+	  version="EE-3.7.1"
 	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/wd-hr http://www.mulesoft.org/schema/mule/wd-hr/current/mule-wd-hr.xsd
 http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
 http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/current/mule-data-mapper.xsd
-http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd">
-    <data-mapper:config name="Map_To_ChangePersonalInformationRequestType" transformationGraphPath="map_to_changepersonalinformationrequesttype.grf" doc:name="Map_To_ChangePersonalInformationRequestType"/>
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
     <sub-flow name="deletePermissionFlow">
         <logger message="delete: #[payload]" level="INFO" doc:name="Logger"/>
         <sfdc:delete config-ref="Salesforce" doc:name="Salesforce">
@@ -33,7 +33,26 @@ http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfd
         </processor-chain>
     </sub-flow>
     <sub-flow name="updateWorkdayFlow">
-        <data-mapper:transform config-ref="Map_To_ChangePersonalInformationRequestType" doc:name="Map To ChangePersonalInformationRequestType"/>
+        <dw:transform-message doc:name="Create ChangePersonalInfomationRequestRequest">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{	
+	changePersonalInformationData: {		
+		personalInformationData: {
+			dateOfBirth: |2015-07-07T23:57:59|
+		},
+		workerReference: {
+			ID: [{
+				type: "Employee_ID",
+				value: payload.id
+			}]
+		}
+	}
+} as :object {
+	class : "com.workday.hr.ChangePersonalInformationRequestType"
+}]]></dw:set-payload>
+        </dw:transform-message>
         <wd-hr:change-personal-information config-ref="WorkdayHumanResource" doc:name="Workday Human Resource"/>
     </sub-flow>
 </mule>

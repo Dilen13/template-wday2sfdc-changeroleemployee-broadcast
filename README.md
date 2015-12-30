@@ -150,7 +150,7 @@ In order to use this Mule Anypoint Template you need to configure properties (Cr
 + sfdc.username `user@company.com`
 + sfdc.password `secret`
 + sfdc.securityToken `1234fdkfdkso20kw2sd`
-+ sfdc.url `https://login.salesforce.com/services/Soap/u/28.0`
++ sfdc.url `https://login.salesforce.com/services/Soap/u/32.0`
 
 #### Roles Map
 + wday.sfdc.rolesMap `['SOME_ROLE_IN_WDAY': 'SOME_ROLE_IN_SF', 'ANOTHER_ROLE_IN_WDAY': 'ANOTHER_ROLE_IN_SF' ]`

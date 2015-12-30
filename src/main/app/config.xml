@@ -1,25 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" 
+<mule xmlns:spring="http://www.springframework.org/schema/beans"  
  	  xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" 
  	  xmlns:wd-hr="http://www.mulesoft.org/schema/mule/wd-hr" 
  	  xmlns:context="http://www.springframework.org/schema/context"
       xmlns="http://www.mulesoft.org/schema/mule/core"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      version="EE-3.6.2"
+      version="EE-3.7.1"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/wd-hr http://www.mulesoft.org/schema/mule/wd-hr/current/mule-wd-hr.xsd
 http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
 http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
-http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/current/mule-data-mapper.xsd">
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd">
 	
 	<!-- This is the main configuration file, you should place here all the Connectors configuration and declarations -->
 
     <context:property-placeholder location="common.properties, mule.${mule.env}.properties"/>
-
-	<data-mapper:config name="Result_To_UserId" transformationGraphPath="result_to_userId.grf" doc:name="Result mapping to userId for PermissionSet"/>
-    <data-mapper:config name="transform_Workday_workers_for_rolechange" transformationGraphPath="workers_to_rolechange.grf" doc:name="transform_Workday_workers_to_map_of_values_for_rolechange"/>
 
     <wd-hr:config name="WorkdayHumanResource" doc:name="Workday Human Resource" hrEndpoint="${wday.endpoint}" hrPassword="${wday.password}" hrUser="${wday.user}">
         <wd-hr:connection-pooling-profile initialisationPolicy="INITIALISE_ONE" exhaustedAction="WHEN_EXHAUSTED_GROW"/>

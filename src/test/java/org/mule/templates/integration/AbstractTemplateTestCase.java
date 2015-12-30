@@ -27,7 +27,7 @@ public class AbstractTemplateTestCase extends FunctionalTestCase {
 	private static final String TEST_FLOWS_FOLDER_PATH = "./src/test/resources/flows/";
 	private static final String MULE_DEPLOY_PROPERTIES_PATH = "./src/main/app/mule-deploy.properties";
 
-    protected final Prober pollProber = new PollingProber(60000, 8000l);
+    protected final Prober pollProber = new PollingProber(120000, 8000l);
     protected final PipelineSynchronizeListener pipelineListener = new PipelineSynchronizeListener(POLL_FLOW_NAME);
 
     protected static final String TEMPLATE_NAME = "changeroleworker-broadcast";

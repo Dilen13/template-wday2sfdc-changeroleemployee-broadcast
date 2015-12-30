@@ -35,7 +35,7 @@ import com.mulesoft.module.batch.BatchTestHelper;
  */
 public class BusinessLogicIT extends AbstractTemplateTestCase {
 
-    private static final long TIMEOUT_MILLIS = 60000;
+    private static final long TIMEOUT_MILLIS = 120000;
     private static final long DELAY_MILLIS = 500;
 	private static String WORKDAY_WORKER_ID;
     private BatchTestHelper helper;
@@ -48,7 +48,7 @@ public class BusinessLogicIT extends AbstractTemplateTestCase {
     public static void beforeTestClass() {
         System.setProperty("poll.startDelayMillis", "8000");
         System.setProperty("poll.frequencyMillis", "30000");
-        Date initialDate = new Date(System.currentTimeMillis());
+        Date initialDate = new Date(System.currentTimeMillis() - (1000 * 60 * 60 * 24));
         Calendar cal = Calendar.getInstance();
         cal.setTime(initialDate);
         System.setProperty(
@@ -104,8 +104,6 @@ public class BusinessLogicIT extends AbstractTemplateTestCase {
     private void prepareWdayData() throws MuleException, Exception {    	
     	Map<String, Object> user = new HashMap<String, Object>();
     	Random r = new Random();
-    	Calendar c = Calendar.getInstance();
-    	c.setTimeInMillis(r.nextLong());
     	user.put("date", "2000" + "/" + (r.nextInt(12) + 1) + "/" + (r.nextInt(28) + 1));    	
     	user.put("id", WORKDAY_WORKER_ID);    	
     	logger.info("Updating workday worker: " + user);
